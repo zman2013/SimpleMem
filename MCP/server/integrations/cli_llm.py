@@ -62,7 +62,7 @@ class CLIClient:
             messages: List of message dicts with 'role' and 'content'
             temperature: Sampling temperature (ignored by CLI)
             max_tokens: Maximum tokens (ignored by CLI)
-            response_format: Optional response format (ignored by CLI)
+            response_format: Optional response format hint
             stream: Whether to stream (ignored by CLI)
 
         Returns:
@@ -80,6 +80,13 @@ class CLIClient:
                 prompt_parts.append(f"Assistant: {content}")
             else:
                 prompt_parts.append(content)
+
+        # If response_format requests JSON, inject instruction into system prompt
+        if response_format and response_format.get("type") == "json_object":
+            system_parts.append(
+                "IMPORTANT: You MUST respond with valid JSON only. "
+                "No markdown, no code fences, no explanation outside the JSON object."
+            )
 
         system_prompt = "\n".join(system_parts) if system_parts else ""
         user_prompt = "\n".join(prompt_parts)

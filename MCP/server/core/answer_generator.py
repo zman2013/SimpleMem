@@ -76,12 +76,15 @@ class AnswerGenerator:
                 )
 
                 data = self.client.extract_json(response)
-                if data:
-                    return {
-                        "answer": data.get("answer", "Unable to generate answer."),
-                        "reasoning": data.get("reasoning", ""),
-                        "confidence": data.get("confidence", "medium"),
-                    }
+                if data is None:
+                    print(f"Answer generation attempt {attempt + 1}: JSON extraction returned None")
+                    continue
+
+                return {
+                    "answer": data.get("answer", "Unable to generate answer."),
+                    "reasoning": data.get("reasoning", ""),
+                    "confidence": data.get("confidence", "medium"),
+                }
 
             except Exception as e:
                 print(f"Answer generation attempt {attempt + 1} failed: {e}")

@@ -2,44 +2,19 @@
 LLM Client - Handles all LLM interactions
 """
 import json
+from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 from openai import OpenAI
 import config
 
 
-class LLMClient:
+class BaseLLMClient(ABC):
     """
-    Unified LLM client interface
+    Abstract base class for LLM clients.
+    Provides shared JSON extraction utilities; subclasses implement chat_completion.
     """
-    def __init__(
-        self,
-        api_key: Optional[str] = None,
-        model: Optional[str] = None,
-        base_url: Optional[str] = None,
-        enable_thinking: Optional[bool] = None,
-        use_streaming: Optional[bool] = None
-    ):
-        self.api_key = api_key or config.OPENAI_API_KEY
-        self.model = model or config.LLM_MODEL
-        self.base_url = base_url or config.OPENAI_BASE_URL
-        self.enable_thinking = enable_thinking if enable_thinking is not None else config.ENABLE_THINKING
-        self.use_streaming = use_streaming if use_streaming is not None else config.USE_STREAMING
 
-        # Initialize OpenAI client with optional base_url
-        client_kwargs = {"api_key": self.api_key}
-        if self.base_url:
-            client_kwargs["base_url"] = self.base_url
-            print(f"Using custom OpenAI base URL: {self.base_url}")
-
-        if self.enable_thinking:
-            print(f"Deep thinking mode enabled")
-
-        # self.client = OpenAI(**client_kwargs)
-        self.client = OpenAI(
-            base_url=self.base_url,
-            api_key=self.api_key,
-        )
-
+    @abstractmethod
     def chat_completion(
         self,
         messages: List[Dict[str, str]],
@@ -47,89 +22,7 @@ class LLMClient:
         response_format: Optional[Dict[str, str]] = None,
         max_retries: int = 3
     ) -> str:
-        """
-        Standard chat completion with optional thinking mode and retry mechanism
-        """
-        kwargs = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-        }
-
-        if response_format:
-            kwargs["response_format"] = response_format
-
-        # Enable thinking mode if configured (for Qwen and compatible models only)
-        # Only add enable_thinking parameter for Qwen API (identified by base_url)
-        is_qwen_api = self.base_url and "dashscope.aliyuncs.com" in self.base_url
-        
-        if is_qwen_api:
-            # Qwen API requires explicit enable_thinking parameter
-            # - Streaming + thinking: enable_thinking=True
-            # - Non-streaming: enable_thinking=False (required, not optional)
-            # - JSON format: enable_thinking=False (incompatible with thinking mode)
-            if self.use_streaming and self.enable_thinking and not response_format:
-                kwargs["extra_body"] = {"enable_thinking": True}
-            else:
-                # Explicitly set to False for non-streaming calls or JSON format
-                kwargs["extra_body"] = {"enable_thinking": False}
-        # For OpenAI and other APIs, don't add extra_body parameters
-
-        # Retry mechanism
-        last_exception = None
-        for attempt in range(max_retries):
-            try:
-                # Use streaming if configured
-                if self.use_streaming:
-                    kwargs["stream"] = True
-                    return self._handle_streaming_response(**kwargs)
-                else:
-                    response = self.client.chat.completions.create(**kwargs)
-                    return response.choices[0].message.content
-                
-                # kwargs["stream"] = True
-                # return self._handle_streaming_response(**kwargs)
-                    
-            except Exception as e:
-                # print(e)
-                last_exception = e
-                if attempt < max_retries - 1:
-                    import time
-                    wait_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
-                    print(f"LLM API call failed (attempt {attempt + 1}/{max_retries}): {e}")
-                    print(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-                else:
-                    print(f"LLM API call failed after {max_retries} attempts: {e}")
-        
-        # If all retries failed, raise the last exception
-        raise last_exception
-
-    def _handle_streaming_response(self, **kwargs) -> str:
-        """
-        Handle streaming response and collect full content
-        """
-        full_content = []
-        stream = self.client.chat.completions.create(**kwargs)
-
-        # for chunk in stream:
-        #     if chunk.choices is not None:
-        #         print(chunk.choices[0].delta.content)
-        
-        # print('---------')
-
-        for chunk in stream:
-            # print(chunk)
-            # fix list index out of range
-            if len(chunk.choices) > 0 and chunk.choices[0].delta.content is not None:
-                content = chunk.choices[0].delta.content
-                full_content.append(content)
-                # print(full_content)
-                # Optional: print streaming content in real-time
-                # print(content, end='', flush=True)
-        # print(full_content)
-        print()
-        return ''.join(full_content)
+        ...
 
     def extract_json(self, text: str) -> Any:
         """
@@ -295,3 +188,155 @@ class LLMClient:
                             break
 
         return None
+
+
+class LLMClient(BaseLLMClient):
+    """
+    OpenAI-compatible API LLM client
+    """
+    def __init__(
+        self,
+        api_key: Optional[str] = None,
+        model: Optional[str] = None,
+        base_url: Optional[str] = None,
+        enable_thinking: Optional[bool] = None,
+        use_streaming: Optional[bool] = None
+    ):
+        self.api_key = api_key or config.OPENAI_API_KEY
+        self.model = model or config.LLM_MODEL
+        self.base_url = base_url or config.OPENAI_BASE_URL
+        self.enable_thinking = enable_thinking if enable_thinking is not None else config.ENABLE_THINKING
+        self.use_streaming = use_streaming if use_streaming is not None else config.USE_STREAMING
+
+        # Initialize OpenAI client with optional base_url
+        client_kwargs = {"api_key": self.api_key}
+        if self.base_url:
+            client_kwargs["base_url"] = self.base_url
+            print(f"Using custom OpenAI base URL: {self.base_url}")
+
+        if self.enable_thinking:
+            print(f"Deep thinking mode enabled")
+
+        # self.client = OpenAI(**client_kwargs)
+        self.client = OpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key,
+        )
+
+    def chat_completion(
+        self,
+        messages: List[Dict[str, str]],
+        temperature: float = 0.2,
+        response_format: Optional[Dict[str, str]] = None,
+        max_retries: int = 3
+    ) -> str:
+        """
+        Standard chat completion with optional thinking mode and retry mechanism
+        """
+        kwargs = {
+            "model": self.model,
+            "messages": messages,
+            "temperature": temperature,
+        }
+
+        if response_format:
+            kwargs["response_format"] = response_format
+
+        # Enable thinking mode if configured (for Qwen and compatible models only)
+        # Only add enable_thinking parameter for Qwen API (identified by base_url)
+        is_qwen_api = self.base_url and "dashscope.aliyuncs.com" in self.base_url
+        
+        if is_qwen_api:
+            # Qwen API requires explicit enable_thinking parameter
+            # - Streaming + thinking: enable_thinking=True
+            # - Non-streaming: enable_thinking=False (required, not optional)
+            # - JSON format: enable_thinking=False (incompatible with thinking mode)
+            if self.use_streaming and self.enable_thinking and not response_format:
+                kwargs["extra_body"] = {"enable_thinking": True}
+            else:
+                # Explicitly set to False for non-streaming calls or JSON format
+                kwargs["extra_body"] = {"enable_thinking": False}
+        # For OpenAI and other APIs, don't add extra_body parameters
+
+        # Retry mechanism
+        last_exception = None
+        for attempt in range(max_retries):
+            try:
+                # Use streaming if configured
+                if self.use_streaming:
+                    kwargs["stream"] = True
+                    return self._handle_streaming_response(**kwargs)
+                else:
+                    response = self.client.chat.completions.create(**kwargs)
+                    return response.choices[0].message.content
+                
+                # kwargs["stream"] = True
+                # return self._handle_streaming_response(**kwargs)
+                    
+            except Exception as e:
+                # print(e)
+                last_exception = e
+                if attempt < max_retries - 1:
+                    import time
+                    wait_time = (2 ** attempt)  # Exponential backoff: 1s, 2s, 4s
+                    print(f"LLM API call failed (attempt {attempt + 1}/{max_retries}): {e}")
+                    print(f"Retrying in {wait_time} seconds...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"LLM API call failed after {max_retries} attempts: {e}")
+        
+        # If all retries failed, raise the last exception
+        raise last_exception
+
+    def _handle_streaming_response(self, **kwargs) -> str:
+        """
+        Handle streaming response and collect full content
+        """
+        full_content = []
+        stream = self.client.chat.completions.create(**kwargs)
+
+        # for chunk in stream:
+        #     if chunk.choices is not None:
+        #         print(chunk.choices[0].delta.content)
+        
+        # print('---------')
+
+        for chunk in stream:
+            # print(chunk)
+            # fix list index out of range
+            if len(chunk.choices) > 0 and chunk.choices[0].delta.content is not None:
+                content = chunk.choices[0].delta.content
+                full_content.append(content)
+                # print(full_content)
+                # Optional: print streaming content in real-time
+                # print(content, end='', flush=True)
+        # print(full_content)
+        print()
+        return ''.join(full_content)
+
+
+def create_llm_client(**kwargs) -> BaseLLMClient:
+    """
+    Factory function to create an LLM client based on config.LLM_BACKEND.
+
+    Args:
+    - For "api" backend: api_key, model, base_url, enable_thinking, use_streaming
+    - For "cli" backend: command, timeout
+    """
+    backend = getattr(config, 'LLM_BACKEND', 'api').lower()
+    if backend == 'cli':
+        from utils.cli_llm_client import CLILLMClient
+        return CLILLMClient(
+            command=kwargs.get('command'),
+            timeout=kwargs.get('timeout'),
+        )
+    elif backend == 'api':
+        return LLMClient(
+            api_key=kwargs.get('api_key'),
+            model=kwargs.get('model'),
+            base_url=kwargs.get('base_url'),
+            enable_thinking=kwargs.get('enable_thinking'),
+            use_streaming=kwargs.get('use_streaming'),
+        )
+    else:
+        raise ValueError(f"Unknown LLM_BACKEND: '{backend}'. Supported: 'api', 'cli'")

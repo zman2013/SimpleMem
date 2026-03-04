@@ -361,6 +361,55 @@ LLM_MODEL = "gpt-4.1-mini"
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-0.6B"  # 最先进的检索模型
 ```
 
+### 🖥️ CLI LLM 后端（可选）
+
+SimpleMem 支持使用本地 CLI 命令（如 `claude-opus`、`claude`）作为 LLM 后端，替代 HTTP API。当你本地安装了 CLI 工具且不想管理 API 密钥时非常有用。
+
+**配置方法** — 编辑 `config.py`：
+
+```python
+# 切换到 CLI 后端
+LLM_BACKEND = "cli"
+
+# 要调用的 CLI 命令（需支持 stdin 输入和 -p 参数）
+CLI_COMMAND = "claude-opus"
+
+# 超时时间，单位秒（默认 300）
+CLI_TIMEOUT = 300
+```
+
+**要求：**
+- CLI 命令须在 `$PATH` 中可用
+- 须支持 `-p` 参数进入 prompt 模式，并从 **stdin** 读取 prompt
+- 建议支持 `--system-prompt` 传递系统消息
+
+**支持的 CLI 工具：**
+| 工具 | 命令 | 说明 |
+|------|------|------|
+| Claude Code | `claude` | Anthropic 的 Claude CLI |
+| Claude Opus 别名 | `claude-opus` | 特定模型的自定义别名 |
+| 其他兼容 CLI | `your-tool` | 须支持 stdin + `-p` 参数 |
+
+**工作原理：**
+1. 系统消息通过 `--system-prompt` 传递（原生语义分离）
+2. 用户消息通过 **stdin** 管道传入（无命令行长度限制）
+3. 失败时指数退避重试，与 API 后端一致
+4. JSON 提取（`extract_json`）对两种后端行为完全相同
+
+**编程使用：**
+
+```python
+from main import SimpleMemSystem
+
+# config.py 中设置 LLM_BACKEND="cli" 后，无需 API 密钥：
+system = SimpleMemSystem(clear_db=True)
+system.add_dialogue("Alice", "你好 Bob！", "2025-11-15T14:30:00")
+system.finalize()
+answer = system.ask("Alice 说了什么？")
+```
+
+切换回默认 HTTP API 后端，只需在 `config.py` 中设置 `LLM_BACKEND = "api"`，所有现有代码无需修改。
+
 ---
 
 ## ⚡ 快速开始

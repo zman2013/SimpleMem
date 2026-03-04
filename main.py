@@ -4,7 +4,7 @@ Main system class integrating all components
 """
 from typing import List, Optional
 from models.memory_entry import Dialogue, MemoryEntry
-from utils.llm_client import LLMClient
+from utils.llm_client import create_llm_client
 from utils.embedding import EmbeddingModel
 from database.vector_store import VectorStore
 from core.memory_builder import MemoryBuilder
@@ -65,7 +65,7 @@ class SimpleMemSystem:
         print("=" * 60)
 
         # Initialize core components
-        self.llm_client = LLMClient(
+        self.llm_client = create_llm_client(
             api_key=api_key,
             model=model,
             base_url=base_url,

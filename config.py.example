@@ -53,6 +53,18 @@ USE_JSON_FORMAT = False
 
 
 # ============================================================================
+# LLM Backend Configuration
+# ============================================================================
+
+# Backend type: "api" (OpenAI-compatible HTTP) or "cli" (local CLI command)
+LLM_BACKEND = "api"
+
+# CLI Backend Settings (used when LLM_BACKEND = "cli")
+CLI_COMMAND = "claude-opus"       # CLI executable name
+CLI_TIMEOUT = 300                 # Timeout in seconds
+
+
+# ============================================================================
 # Memory Building Parameters
 # ============================================================================
 

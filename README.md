@@ -373,6 +373,55 @@ LLM_MODEL = "gpt-4.1-mini"
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-0.6B"  # State-of-the-art retrieval
 ```
 
+### 🖥️ CLI LLM Backend (Optional)
+
+SimpleMem supports using local CLI commands (e.g. `claude-opus`, `claude`) as the LLM backend instead of an HTTP API. This is useful when you have a CLI tool installed locally and want to avoid managing API keys.
+
+**Configuration** — edit `config.py`:
+
+```python
+# Switch to CLI backend
+LLM_BACKEND = "cli"
+
+# CLI command to invoke (must accept stdin and support -p flag)
+CLI_COMMAND = "claude-opus"
+
+# Timeout in seconds (default: 300)
+CLI_TIMEOUT = 300
+```
+
+**Requirements:**
+- The CLI command must be available in your `$PATH`
+- It must accept `-p` flag for prompt mode and read the prompt from **stdin**
+- It must support `--system-prompt` for system messages (optional but recommended)
+
+**Supported CLI tools:**
+| Tool | Command | Notes |
+|------|---------|-------|
+| Claude Code | `claude` | Anthropic's CLI for Claude |
+| Claude Opus alias | `claude-opus` | Custom alias for a specific model |
+| Any compatible CLI | `your-tool` | Must support stdin + `-p` flag |
+
+**How it works:**
+1. System messages are passed via `--system-prompt` (native semantic separation)
+2. User messages are piped through **stdin** (no command-line length limits)
+3. Retries with exponential backoff on failure, same as the API backend
+4. JSON extraction (`extract_json`) works identically for both backends
+
+**Programmatic usage:**
+
+```python
+from main import SimpleMemSystem
+
+# When LLM_BACKEND="cli" in config.py, no API key needed:
+system = SimpleMemSystem(clear_db=True)
+system.add_dialogue("Alice", "Hello Bob!", "2025-11-15T14:30:00")
+system.finalize()
+answer = system.ask("What did Alice say?")
+```
+
+To switch back to the default HTTP API backend, set `LLM_BACKEND = "api"` in `config.py`. All existing code continues to work without changes.
+
 ---
 
 ## 🐳 Run with Docker

@@ -85,3 +85,6 @@ test_results/
 *.pth
 *.onnx
 docs/other
+
+# Dolt database files (added by bd init)
+.dolt/

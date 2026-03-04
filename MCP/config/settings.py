@@ -64,7 +64,21 @@ class Settings:
     # LLM Provider Configuration
     llm_provider: str = field(default_factory=lambda: os.getenv(
         "LLM_PROVIDER",
-        "openrouter"  # Options: "openrouter", "ollama"
+        "openrouter"  # Options: "openrouter", "ollama", "cli"
+    ))
+
+    # CLI LLM Configuration (used when llm_provider is "cli")
+    cli_command: str = field(default_factory=lambda: os.getenv(
+        "CLI_COMMAND",
+        "claude-opus"
+    ))
+    cli_timeout: int = field(default_factory=lambda: int(os.getenv(
+        "CLI_TIMEOUT",
+        "300"
+    )))
+    local_embedding_model: str = field(default_factory=lambda: os.getenv(
+        "LOCAL_EMBEDDING_MODEL",
+        "Qwen/Qwen3-Embedding-0.6B"
     ))
 
     # OpenRouter Configuration (used when llm_provider is "openrouter")

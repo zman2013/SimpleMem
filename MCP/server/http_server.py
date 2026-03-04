@@ -36,6 +36,7 @@ from .database.user_store import UserStore
 from .database.vector_store import MultiTenantVectorStore
 from .integrations.openrouter import OpenRouterClient, OpenRouterClientManager
 from .integrations.ollama import OllamaClient, OllamaClientManager
+from .integrations.cli_llm import CLIClient, CLIClientManager
 from .mcp_handler import MCPHandler
 
 import sys
@@ -108,6 +109,12 @@ if settings.llm_provider == "ollama":
         base_url=settings.ollama_base_url,
         llm_model=settings.llm_model,
         embedding_model=settings.embedding_model,
+    )
+elif settings.llm_provider == "cli":
+    client_manager = CLIClientManager(
+        cli_command=settings.cli_command,
+        cli_timeout=settings.cli_timeout,
+        local_embedding_model=settings.local_embedding_model,
     )
 else:  # Default to OpenRouter
     client_manager = OpenRouterClientManager(
@@ -307,6 +314,21 @@ async def register(request: RegisterRequest):
                 return RegisterResponse(
                     success=False,
                     error=f"Cannot connect to Ollama: {error}",
+                )
+        elif settings.llm_provider == "cli":
+            if not api_key or api_key == "":
+                # Use a placeholder key for CLI
+                api_key = "cli-placeholder-key"
+
+            # Verify CLI command is available
+            client = CLIClient(cli_command=settings.cli_command)
+            is_valid, error = await client.verify_api_key()
+            await client.close()
+
+            if not is_valid:
+                return RegisterResponse(
+                    success=False,
+                    error=f"CLI command not available: {error}",
                 )
         else:
             # For OpenRouter, validate the API key

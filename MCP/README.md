@@ -12,7 +12,8 @@ SimpleMem MCP Server is a cloud-hosted long-term memory service for LLM agents, 
 - **Hybrid Retrieval**: Semantic search + keyword matching + metadata filtering
 - **Intelligent Planning**: Automatic query decomposition and reflection for complex queries
 - **Multi-tenant Isolation**: Per-user data tables with token authentication
-- **OpenRouter Integration**: Powered by OpenRouter's LLM and Embedding services
+- **Multiple LLM Backends**: OpenRouter API, Ollama (local), or CLI command (e.g. `claude-opus`)
+- **Local Embedding Support**: Run embeddings locally with SentenceTransformer (Qwen3-Embedding-0.6B)
 - **Production Optimized**: Faster response times compared to the academic reference implementation
 
 ## Architecture
@@ -45,8 +46,11 @@ SimpleMem MCP Server is a cloud-hosted long-term memory service for LLM agents, 
 │  └─────────────────── LanceDB ──────────────────────────┘     │
 │                                                                 │
 │  ┌──────────────────────────────────────────────────────────┐  │
-│  │               OpenRouter API Integration                  │  │
-│  │  LLM: openai/gpt-4.1-mini    Embed: qwen/qwen3-embed-4b  │  │
+│  │            LLM Provider (configurable)                  │  │
+│  │  ┌──────────────┐ ┌──────────────┐ ┌────────────────┐  │  │
+│  │  │  OpenRouter   │ │    Ollama    │ │   CLI Command  │  │  │
+│  │  │  (cloud API)  │ │   (local)   │ │ (e.g. claude)  │  │  │
+│  │  └──────────────┘ └──────────────┘ └────────────────┘  │  │
 │  └──────────────────────────────────────────────────────────┘  │
 │                                                                 │
 └─────────────────────────────────────────────────────────────────┘
@@ -85,7 +89,14 @@ export ENCRYPTION_KEY="your-32-byte-encryption-key!!"
 #### 3. Start the Server
 
 ```bash
+# Default: OpenRouter provider
 python run.py
+
+# Ollama provider (local LLM)
+LLM_PROVIDER=ollama python run.py
+
+# CLI provider (e.g. claude-opus CLI + local embedding)
+LLM_PROVIDER=cli EMBEDDING_DIMENSION=1024 python run.py
 ```
 
 Output:
@@ -101,6 +112,89 @@ Output:
 
 ------------------------------------------------------------
 ```
+
+## LLM Providers
+
+SimpleMem supports three LLM backends, configured via the `LLM_PROVIDER` environment variable.
+
+### OpenRouter (default)
+
+Uses [OpenRouter](https://openrouter.ai/) cloud API for both LLM and embedding.
+
+```bash
+# No extra config needed (default)
+python run.py
+```
+
+Register with your OpenRouter API key:
+```bash
+curl -X POST http://localhost:8000/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"openrouter_api_key": "sk-or-..."}'
+```
+
+### Ollama (local LLM)
+
+Uses a local [Ollama](https://ollama.com/) instance for both LLM and embedding.
+
+```bash
+LLM_PROVIDER=ollama LLM_MODEL=qwen3:4b-instruct python run.py
+```
+
+Register (no API key required):
+```bash
+curl -X POST http://localhost:8000/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"openrouter_api_key": ""}'
+```
+
+### CLI (command-line LLM + local embedding)
+
+Calls any CLI command (e.g. `claude-opus`, `llm`, or a custom script) for chat completion via stdin/stdout, and uses a local [SentenceTransformer](https://sbert.net/) model for embedding.
+
+This is useful when you already have a CLI tool that wraps an LLM and want to reuse it without running a separate API server.
+
+```bash
+LLM_PROVIDER=cli EMBEDDING_DIMENSION=1024 python run.py
+```
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `CLI_COMMAND` | `claude-opus` | CLI executable name (must be in `$PATH`) |
+| `CLI_TIMEOUT` | `300` | Timeout in seconds per LLM call |
+| `LOCAL_EMBEDDING_MODEL` | `Qwen/Qwen3-Embedding-0.6B` | HuggingFace model ID for local embedding |
+| `EMBEDDING_DIMENSION` | `2560` | Must match the model dimension (1024 for Qwen3-Embedding-0.6B) |
+
+**How it works:**
+
+- **Chat completion**: The user prompt is piped to the CLI command via stdin. System messages are passed with the `--system-prompt` flag. Includes automatic retry (3 attempts) on failure.
+- **Embedding**: Uses `sentence-transformers` to run the embedding model locally. The model is downloaded automatically on first use (~1.2 GB for Qwen3-Embedding-0.6B).
+
+Register (no API key required):
+```bash
+curl -X POST http://localhost:8000/api/auth/register \
+  -H 'Content-Type: application/json' \
+  -d '{"openrouter_api_key": ""}'
+```
+
+#### Claude Code Integration
+
+After registering and getting a token, add SimpleMem to your Claude Code settings (`~/.claude/settings.json`):
+
+```json
+{
+  "mcpServers": {
+    "simplemem": {
+      "url": "http://localhost:8000/mcp",
+      "headers": {
+        "Authorization": "Bearer YOUR_TOKEN"
+      }
+    }
+  }
+}
+```
+
+Then verify in Claude Code that the MCP tools (`memory_add`, `memory_query`, etc.) are available.
 
 ## MCP Protocol
 
@@ -250,6 +344,25 @@ User Question: "When am I meeting Bob?"
 
 ## Configuration Options
 
+### General
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `LLM_PROVIDER` | `openrouter` | LLM backend: `openrouter`, `ollama`, or `cli` |
+| `LLM_MODEL` | `openai/gpt-4.1-mini` | LLM model name |
+| `EMBEDDING_MODEL` | `qwen3-embedding:4b` | Embedding model (OpenRouter/Ollama) |
+| `EMBEDDING_DIMENSION` | `2560` | Embedding vector dimension |
+
+### CLI Provider
+
+| Environment Variable | Default | Description |
+|---------------------|---------|-------------|
+| `CLI_COMMAND` | `claude-opus` | CLI executable for chat completion |
+| `CLI_TIMEOUT` | `300` | Timeout per CLI call (seconds) |
+| `LOCAL_EMBEDDING_MODEL` | `Qwen/Qwen3-Embedding-0.6B` | Local SentenceTransformer model |
+
+### Server Tuning
+
 | Option | Default | Description |
 |--------|---------|-------------|
 | `window_size` | 20 | Number of dialogues per processing batch |
@@ -258,8 +371,6 @@ User Question: "When am I meeting Bob?"
 | `enable_planning` | true | Enable query planning |
 | `enable_reflection` | true | Enable reflection iteration |
 | `max_reflection_rounds` | 2 | Maximum reflection rounds |
-| `llm_model` | openai/gpt-4.1-mini | LLM model |
-| `embedding_model` | qwen/qwen3-embedding-4b | Embedding model |
 
 ## Development
 

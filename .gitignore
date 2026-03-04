@@ -88,3 +88,6 @@ docs/other
 
 # Dolt database files (added by bd init)
 .dolt/
+
+MCP/data
+
